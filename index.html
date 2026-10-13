@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Morse Code Light Transmitter</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body { background: #030712; }
+  #flash-overlay { display: none; position: fixed; inset: 0; background: white; z-index: 999; }
+  .morse-char { font-family: monospace; font-size: 18px; letter-spacing: 2px; }
+  .dot-active { color: #fbbf24; }
+  .dash-active { color: #f97316; }
+  .light-bulb { transition: all 0.05s; }
+  .bulb-on { background: #fef08a; box-shadow: 0 0 40px 20px #fef08a80, 0 0 80px 40px #fbbf2440; }
+  .bulb-off { background: #374151; box-shadow: none; }
+</style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+<div id="flash-overlay"></div>
+
+<div class="max-w-3xl mx-auto px-4 py-6">
+  <div class="mb-6">
+    <h1 class="text-2xl font-bold text-white">💡 Morse Code Light Transmitter</h1>
+    <p class="text-gray-400 text-sm mt-1">Convert text to Morse code and transmit via light flash or audio beep</p>
+  </div>
+
+  <!-- Mode tabs -->
+  <div class="flex gap-1 bg-gray-900 rounded-xl p-1 mb-6 border border-gray-800" role="tablist">
+    <button onclick="switchMode('encode')" id="tab-encode" class="flex-1 py-2 rounded-lg text-sm font-semibold transition-all bg-indigo-600 text-white" role="tab" aria-selected="true">📡 Transmit (Text → Morse)</button>
+    <button onclick="switchMode('decode')" id="tab-decode" class="flex-1 py-2 rounded-lg text-sm font-medium transition-all text-gray-400 hover:text-white" role="tab" aria-selected="false">🔍 Decode (Dots/Dashes → Text)</button>
+  </div>
+
+  <!-- Encode Mode -->
+  <div id="mode-encode">
+    <div class="bg-gray-900 rounded-xl p-5 border border-gray-800 mb-4">
+      <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2" for="text-to-morse">Text to Transmit</label>
+      <div class="flex gap-2">
+        <input id="text-to-morse" type="text" value="HELLO WORLD" oninput="updateMorse()" maxlength="100"
+          class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-white text-sm placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          placeholder="Type text to convert...">
+      </div>
+    </div>
+
+    <!-- Morse Display -->
+    <div class="bg-gray-900 rounded-xl p-5 border border-gray-800 mb-4">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs font-semibold text-gray-400 uppercase tracking-wide">Morse Code</span>
+        <button onclick="copyMorse()" class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">📋 Copy</button>
+      </div>
+      <div id="morse-display" class="morse-char text-yellow-300 leading-loose break-all min-h-8"></div>
+    </div>
+
+    <!-- Speed Control -->
+    <div class="bg-gray-900 rounded-xl p-5 border border-gray-800 mb-4">
+      <div class="flex items-center gap-4">
+        <label class="text-xs font-semibold text-gray-400 uppercase tracking-wide whitespace-nowrap" for="speed-slider">Speed:</label>
+        <input id="speed-slider" type="range" min="5" max="30" value="12" oninput="updateSpeed()" class="flex-1 h-2 bg-gray-700 rounded-full appearance-none cursor-pointer">
+        <span id="speed-label" class="text-sm font-semibold text-indigo-400 w-16 text-right">12 WPM</span>
+      </div>
+    </div>
+
+    <!-- Transmission Controls -->
+    <div class="flex gap-3 mb-6">
+      <button onclick="startFlash()" id="btn-flash" class="flex-1 bg-yellow-600 hover:bg-yellow-500 text-white px-4 py-3 rounded-xl font-semibold text-sm transition-colors">⚡ Flash Mode</button>
+      <button onclick="startBeep()"  id="btn-beep"  class="flex-1 bg-blue-700   hover:bg-blue-600  text-white px-4 py-3 rounded-xl font-semibold text-sm transition-colors">🔊 Beep Mode</button>
+      <button onclick="stopAll()"    id="btn-stop"  class="bg-red-800 hover:bg-red-700 text-white px-4 py-3 rounded-xl font-semibold text-sm transition-colors disabled:opacity-50">⏹ Stop</button>
+    </div>
+
+    <!-- Visual bulb -->
+    <div class="flex justify-center mb-4">
+      <div id="bulb" class="light-bulb bulb-off w-24 h-24 rounded-full flex items-center justify-center text-4xl">💡</div>
+    </div>
+    <div id="transmission-progress" class="text-center text-xs text-gray-500"></div>
+  </div>
+
+  <!-- Decode Mode -->
+  <div id="mode-decode" class="hidden">
+    <div class="bg-gray-900 rounded-xl p-5 border border-gray-800 mb-4">
+      <label class="block text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2" for="morse-input">Enter Morse Code</label>
+      <p class="text-xs text-gray-500 mb-2">Dots (.) and dashes (-) separated by spaces for letters, slash (/) for word breaks</p>
+      <textarea id="morse-input" rows="3" oninput="decodeMorse()" placeholder="... --- ... / .... . .-.. .-.. ---"
+        class="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-yellow-300 font-mono text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-yellow-500 resize-none"></textarea>
+      <div class="bg-gray-800 rounded-lg p-4 mt-3">
+        <div class="text-xs text-gray-400 mb-1 uppercase tracking-wide">Decoded Text</div>
+        <div id="decoded-text" class="text-xl font-bold text-green-400 min-h-7">—</div>
+      </div>
+    </div>
+
+    <!-- Morse Reference Chart -->
+    <div class="bg-gray-900 rounded-xl p-5 border border-gray-800">
+      <h3 class="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-4">Morse Code Reference</h3>
+      <div id="reference-chart" class="grid grid-cols-4 sm:grid-cols-6 gap-2"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const MORSE = {
+  'A':'.-','B':'-...','C':'-.-.','D':'-..','E':'.','F':'..-.','G':'--.','H':'....','I':'..','J':'.---',
+  'K':'-.-','L':'.-..','M':'--','N':'-.','O':'---','P':'.--.','Q':'--.-','R':'.-.','S':'...','T':'-',
+  'U':'..-','V':'...-','W':'.--','X':'-..-','Y':'-.--','Z':'--..',
+  '0':'-----','1':'.----','2':'..---','3':'...--','4':'....-','5':'.....','6':'-....','7':'--...','8':'---..','9':'----.',
+  '.':'.-.-.-',',':'--..--','?':'..--..','!':'-.-.--','/':'-..-.','@':'.--.-.','&':'.-...'
+};
+
+const MORSE_INV = Object.fromEntries(Object.entries(MORSE).map(([k,v])=>[v,k]));
+
+function textToMorse(text) {
+  return text.toUpperCase().split('').map(c => {
+    if (c === ' ') return '/';
+    return MORSE[c] || '';
+  }).filter(Boolean).join(' ');
+}
+
+let wpm = 12;
+let unit = () => Math.round(1200 / wpm);
+let transmitting = false;
+let audioCtx = null;
+let timeouts = [];
+
+function escapeHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function switchMode(mode) {
+  document.getElementById('mode-encode').classList.toggle('hidden', mode !== 'encode');
+  document.getElementById('mode-decode').classList.toggle('hidden', mode !== 'decode');
+  document.getElementById('tab-encode').className = `flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${mode==='encode' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`;
+  document.getElementById('tab-decode').className = `flex-1 py-2 rounded-lg text-sm font-semibold transition-all ${mode==='decode' ? 'bg-indigo-600 text-white' : 'text-gray-400 hover:text-white'}`;
+}
+
+function updateMorse() {
+  const text = document.getElementById('text-to-morse').value;
+  const morse = textToMorse(text);
+  document.getElementById('morse-display').textContent = morse;
+}
+
+function copyMorse() {
+  const m = document.getElementById('morse-display').textContent;
+  navigator.clipboard.writeText(m).then(() => alert('Copied!'));
+}
+
+function updateSpeed() {
+  wpm = parseInt(document.getElementById('speed-slider').value);
+  document.getElementById('speed-label').textContent = wpm + ' WPM';
+}
+
+function stopAll() {
+  transmitting = false;
+  timeouts.forEach(clearTimeout);
+  timeouts = [];
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  document.getElementById('flash-overlay').style.display = 'none';
+  setBulb(false);
+  document.getElementById('transmission-progress').textContent = '';
+}
+
+function setBulb(on) {
+  const b = document.getElementById('bulb');
+  b.className = 'light-bulb ' + (on ? 'bulb-on' : 'bulb-off') + ' w-24 h-24 rounded-full flex items-center justify-center text-4xl';
+}
+
+function buildTimeline(morse) {
+  const u = unit();
+  const timeline = [];
+  const symbols = morse.split(' ');
+  let t = 0;
+  symbols.forEach(sym => {
+    if (sym === '/') {
+      t += u * 7; // word gap
+    } else {
+      [...sym].forEach((c, i) => {
+        const dur = c === '.' ? u : u * 3;
+        timeline.push({ on: true, at: t, dur });
+        t += dur + u; // inter-element gap
+      });
+      t += u * 3; // inter-letter gap (already added u above)
+    }
+  });
+  return { timeline, total: t };
+}
+
+function startFlash() {
+  stopAll();
+  const text = document.getElementById('text-to-morse').value;
+  const morse = textToMorse(text);
+  if (!morse) return;
+  transmitting = true;
+  const { timeline, total } = buildTimeline(morse);
+  document.getElementById('transmission-progress').textContent = `Transmitting: "${text}"`;
+
+  timeline.forEach(({ at, dur }) => {
+    const t1 = setTimeout(() => {
+      document.getElementById('flash-overlay').style.display = 'block';
+      setBulb(true);
+    }, at);
+    const t2 = setTimeout(() => {
+      document.getElementById('flash-overlay').style.display = 'none';
+      setBulb(false);
+    }, at + dur);
+    timeouts.push(t1, t2);
+  });
+
+  const done = setTimeout(() => {
+    transmitting = false;
+    document.getElementById('transmission-progress').textContent = 'Transmission complete ✓';
+  }, total);
+  timeouts.push(done);
+}
+
+function startBeep() {
+  stopAll();
+  const text = document.getElementById('text-to-morse').value;
+  const morse = textToMorse(text);
+  if (!morse) return;
+  transmitting = true;
+  const { timeline, total } = buildTimeline(morse);
+  document.getElementById('transmission-progress').textContent = `Transmitting: "${text}"`;
+
+  try {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    timeline.forEach(({ at, dur }) => {
+      const t1 = setTimeout(() => {
+        if (!audioCtx) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.frequency.value = 700;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur/1000);
+        osc.start(); osc.stop(audioCtx.currentTime + dur/1000);
+        setBulb(true);
+        setTimeout(() => setBulb(false), dur);
+      }, at);
+      timeouts.push(t1);
+    });
+    const done = setTimeout(() => {
+      transmitting = false;
+      document.getElementById('transmission-progress').textContent = 'Transmission complete ✓';
+    }, total);
+    timeouts.push(done);
+  } catch(e) {
+    alert('Audio not available: ' + e.message);
+  }
+}
+
+function decodeMorse() {
+  const input = document.getElementById('morse-input').value.trim();
+  if (!input) { document.getElementById('decoded-text').textContent = '—'; return; }
+  const words = input.split(/\s*\/\s*/);
+  const decoded = words.map(word => {
+    return word.trim().split(/\s+/).map(sym => MORSE_INV[sym] || '?').join('');
+  }).join(' ');
+  document.getElementById('decoded-text').textContent = decoded;
+}
+
+function renderReferenceChart() {
+  const el = document.getElementById('reference-chart');
+  const chars = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'];
+  el.innerHTML = chars.map(c => `
+    <div class="bg-gray-800 rounded-lg p-2 text-center">
+      <div class="font-bold text-white text-sm">${escapeHtml(c)}</div>
+      <div class="font-mono text-yellow-400 text-xs mt-0.5">${escapeHtml(MORSE[c]||'')}</div>
+    </div>`).join('');
+}
+
+updateMorse();
+renderReferenceChart();
+</script>
+</body>
+</html>
